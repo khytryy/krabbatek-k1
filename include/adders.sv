@@ -38,3 +38,41 @@ module adder4bit
     adder u3(a[3],  b[3],   c2,     res[3],     cout);
 
 endmodule
+
+module adder8bit
+(
+    input logic[7:0]    a,
+    input logic[7:0]    b,
+    input logic         cin,
+
+    output logic[7:0]   res,
+    output logic        cout
+);
+
+    logic c0;
+
+    adder4bit u0(a[3:0],    b[3:0],     cin,    res[3:0],   c0);
+    adder4bit u1(a[7:4],    b[7:4],     c0,     res[7:4],   cout);
+
+endmodule
+
+module adder16bit
+(
+    input logic[15:0]   a,
+    input logic[15:0]   b,
+    input logic         cin,
+
+    output logic[15:0]  res,
+    output logic        cout
+);
+
+    logic c0;
+
+    adder8bit u0(a[7:0],    b[7:0],     cin,    res[7:0],   c0);
+    adder8bit u1(a[15:8],   b[15:8],    c0,     res[15:8]   cout);
+
+endmodule
+
+module adder32bit
+()
+endmodule
