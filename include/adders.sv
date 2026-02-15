@@ -4,8 +4,8 @@ module adder
     input logic     b,
     input logic     cin,
 
-    output logic    res,
-    output logic    cout
+    output wire     res,
+    output wire     cout
 );
 
     wire o0, o1, o3;
@@ -69,10 +69,23 @@ module adder16bit
     logic c0;
 
     adder8bit u0(a[7:0],    b[7:0],     cin,    res[7:0],   c0);
-    adder8bit u1(a[15:8],   b[15:8],    c0,     res[15:8]   cout);
+    adder8bit u1(a[15:8],   b[15:8],    c0,     res[15:8],  cout);
 
 endmodule
 
 module adder32bit
-()
+(
+    input logic[31:0]   a,
+    input logic[31:0]   b,
+    input logic         cin,
+
+    output logic[31:0]  res,
+    output logic        cout
+);
+
+    logic c0;
+
+    adder16bit u0(a[15:0],  b[15:0],    cin,    res[15:0],      c0);
+    adder16bit u1(a[31:16], b[31:16],   c0,     res[31:16],     cout);
+
 endmodule

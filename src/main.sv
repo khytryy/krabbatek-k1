@@ -1,6 +1,3 @@
-module main;
-    initial begin
-        $display("Krabba!");
-        $finish;
-    end
+module main();
+
 endmodule
