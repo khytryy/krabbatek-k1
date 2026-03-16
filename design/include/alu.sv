@@ -20,7 +20,7 @@ module alu
 
     logic[31:0] temp_a, temp_b, raw_out, add_result;
 
-    adder32bit a0(
+    adder32bit u0(
         .a   (temp_a),
         .b   (temp_b),
         .cin (1'b0),
@@ -38,6 +38,7 @@ module alu
 
         // Opcodes
         case (op)
+            // ADD, AND, OR, XOR, NOT A, NOT B
             3'b001: raw_out = add_result;
             3'b010: raw_out = temp_a & temp_b;
             3'b011: raw_out = temp_a | temp_b;
