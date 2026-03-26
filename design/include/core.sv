@@ -1,5 +1,6 @@
-module k1core
+module controlUnit
 (
+    input logic[31:0] ins,
     
 );
 
