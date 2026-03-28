@@ -15,6 +15,7 @@ module alu
     output logic        lt,
     output logic        gt,
     output logic        zr,
+    output logic        ng,
     output logic[31:0]  out
 );
 
@@ -54,5 +55,6 @@ module alu
     assign zr = (out == 32'b0);
     assign lt = out[31];
     assign gt = !zr && !lt;
+    assign ng = out[31];
 
 endmodule

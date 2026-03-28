@@ -1,6 +1,8 @@
 #include <stdio.h>
 #include <string.h>
 
+#include <core.h>
+
 void printUsage() {
     printf("Usage:\n\n");
     printf("ktek-k1-vm [BIN] [FW]   -   Instance a new VM with provided files\n");
@@ -31,6 +33,10 @@ int main(int argc, char* argv[]) {
         perror("ERROR: Failed to load firmware");
         return 1;
     }
+
+    k1core chip;
+    k1coreInit(&chip, fw);
+    k1coreRun(&chip);
 
     return 0;
 }
