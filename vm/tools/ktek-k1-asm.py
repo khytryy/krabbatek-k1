@@ -1,7 +1,9 @@
+#!/usr/bin/env python3
+
 import sys
 import struct
 
-RESET_VECTOR = 0x6B31
+BEGIN_ADDR = 0x0
 
 INSTRUCTIONS = {
     "NOP":   (0x09, 0),
@@ -41,14 +43,18 @@ INSTRUCTIONS = {
     "POPM":  (0x2B, 1),  # addr
     "CALL":  (0x2C, 1),  # addr
     "RET":   (0x2D, 0),
-    "FWOFF": (0x2E, 0),
+    "FWON":  (0x2E, 0),
+    "FWOFF": (0x2F, 0),
+    "INT":    (0x30, 1), # imm
+    "PUSHAR": (0x31, 0),
+    "JMPU":   (0x32, 1),  # addr
+    "LOADSP": (0x33, 1),  # reg
+
 }
 
 REGISTERS = {f"r{i}": i for i in range(16)}
 
-
 def parse_arg(token, line_num):
-    """Parse a single argument — register name or integer literal."""
     token = token.lower()
     if token in REGISTERS:
         return REGISTERS[token]
@@ -63,44 +69,58 @@ def parse_arg(token, line_num):
 
 def assemble(src_path, out_path):
     labels = {}
-    address = RESET_VECTOR
+    address = BEGIN_ADDR
 
     with open(src_path) as f:
         lines = f.readlines()
 
+    # First pass: collect labels
     for line_num, line in enumerate(lines, 1):
         line = line.split(";")[0].strip()
         if not line:
             continue
 
+        if line.startswith(".org"):
+            new_addr = int(line.split()[1], 16)
+            if new_addr < address:
+                print(f"ERROR line {line_num}: .org 0x{new_addr:X} is behind current address 0x{address:X}")
+                sys.exit(1)
+            address = new_addr
+            continue
+
         if line.endswith(":"):
-            label = line[:-1].strip()
-            labels[label] = address
+            labels[line[:-1].strip()] = address
             continue
 
         tokens = line.split()
         mnemonic = tokens[0].upper()
-
         if mnemonic not in INSTRUCTIONS:
-            print(f"ERROR: line {line_num}: Unknown mnemonic '{mnemonic}'")
+            print(f"ERROR line {line_num}: Unknown mnemonic '{mnemonic}'")
             sys.exit(1)
 
         _, argc = INSTRUCTIONS[mnemonic]
         address += 2 + argc * 4
 
-    # Second pass
+    # Second pass: emit binary
     out = bytearray()
-    out += b'\x00' * RESET_VECTOR
+    out += b'\x00' * BEGIN_ADDR
+    address = BEGIN_ADDR
 
     for line_num, line in enumerate(lines, 1):
         line = line.split(";")[0].strip()
         if not line or line.endswith(":"):
             continue
 
+        if line.startswith(".org"):
+            new_addr = int(line.split()[1], 16)
+            out += b'\x00' * (new_addr - address)  # pad to new address
+            address = new_addr
+            continue
+
         tokens = line.split()
         mnemonic = tokens[0].upper()
         opcode, argc = INSTRUCTIONS[mnemonic]
-        arg_tokens = [t.rstrip(",") for t in tokens[1:]]  # <-- here
+        arg_tokens = [t.rstrip(",") for t in tokens[1:]]
 
         if len(arg_tokens) != argc:
             print(f"ERROR line {line_num}: '{mnemonic}' expects {argc} args, got {len(arg_tokens)}")
@@ -116,12 +136,27 @@ def assemble(src_path, out_path):
         out += bytes([argc, opcode])
         for a in args:
             out += struct.pack(">I", a)
+        address += 2 + argc * 4
 
     with open(out_path, "wb") as f:
         f.write(out)
 
+    print(f"Wrote {len(out)} bytes to {out_path}")
+    for name, addr in labels.items():
+        print(f"  {name} located at:    0x{addr:X}")
+
 if __name__ == "__main__":
-    if len(sys.argv) != 3:
-        print(f"Usage: {sys.argv[0]} <input.asm> <output.fw>")
+    if len(sys.argv) < 2:
+        print(f"Usage: {sys.argv[0]} <input.k1asm> <output.bin/fw>")
         sys.exit(1)
+
+    if sys.argv[1] == "version":
+        print("KrabbaTek K1 Assembler (ktek-k1-asm) 1.0.0-dev")
+        print("Copyright © 2026 KrabbaTek Group")
+        sys.exit(0)
+
+    if len(sys.argv) != 3:
+        print(f"Usage: {sys.argv[0]} <input.k1asm> <output.bin/fw>")
+        sys.exit(1)
+
     assemble(sys.argv[1], sys.argv[2])

@@ -7,7 +7,7 @@ void k1coreInit(k1core* chip, FILE* fw) {
     chip->sp.v      = 0;
     chip->pc.v      = 0x6B31; // reset vector
     chip->reset     = true;
-    chip->fwboot    = false;
+    chip->fwboot    = true;
     chip->ar.v      = 0;
 
     chip->lt        = false;
@@ -23,6 +23,7 @@ void k1coreInit(k1core* chip, FILE* fw) {
 void k1coreRun(k1core* chip) {
     if (chip->reset) {
         chip->fwboot = true;
+        chip->reset  = false;
     }
 
     while (true) {
@@ -38,7 +39,6 @@ void k1coreRun(k1core* chip) {
         }
 
         k1coreDecodeAndRun(chip, op, args);
-        k1coreDump(chip);
     }
 }
 
@@ -87,15 +87,9 @@ void k1coreDecodeAndRun(k1core* chip, uint8_t op, uint32_t* args) {
 
         // MOVM — args: [reg, addr]
         case 0x0D: {
-            if (args[0] > 0xF) {
-                fprintf(stderr, "ERROR: Unknown register 0x%X\n", args[0]);
-                exit(1);
-            }
+
             uint32_t addr = args[1];
-            if (addr >= RAM_SIZE) {
-                fprintf(stderr, "ERROR: Address 0x%X out of bounds\n", addr);
-                exit(1);
-            }
+
             ram[addr] = chip->regs[args[0]].v;
             break;
         }
@@ -123,10 +117,6 @@ void k1coreDecodeAndRun(k1core* chip, uint8_t op, uint32_t* args) {
 
         // CMPM — args: [addr1, addr2]
         case 0x11: {
-            if (args[0] >= RAM_SIZE || args[1] >= RAM_SIZE) {
-                fprintf(stderr, "ERROR: Address 0x%X or 0x%X out of bounds\n", args[0], args[1]);
-                exit(1);
-            }
             chip->lt = chip->gt = chip->eq = false;
             int32_t a = (int32_t)readMem(args[0], chip->fwboot, chip->fw);
             int32_t b = (int32_t)readMem(args[1], chip->fwboot, chip->fw);
@@ -227,10 +217,6 @@ void k1coreDecodeAndRun(k1core* chip, uint8_t op, uint32_t* args) {
 
         // PUSHM — args: [addr]
         case 0x1E:
-            if (args[0] >= RAM_SIZE) {
-                fprintf(stderr, "ERROR: Address 0x%X out of bounds\n", args[0]);
-                exit(1);
-            }
             pushStack(chip, readMem(args[0], chip->fwboot, chip->fw));
             break;
 
@@ -245,10 +231,6 @@ void k1coreDecodeAndRun(k1core* chip, uint8_t op, uint32_t* args) {
 
         // ANDM — args: [addr1, addr2]
         case 0x20: {
-            if (args[0] >= RAM_SIZE || args[1] >= RAM_SIZE) {
-                fprintf(stderr, "ERROR: Address 0x%X or 0x%X out of bounds\n", args[0], args[1]);
-                exit(1);
-            }
             chip->zr = chip->ng = false;
             uint32_t a = readMem(args[0], chip->fwboot, chip->fw);
             uint32_t b = readMem(args[1], chip->fwboot, chip->fw);
@@ -280,10 +262,7 @@ void k1coreDecodeAndRun(k1core* chip, uint8_t op, uint32_t* args) {
 
         // ORM — args: [addr1, addr2]
         case 0x23: {
-            if (args[0] >= RAM_SIZE || args[1] >= RAM_SIZE) {
-                fprintf(stderr, "ERROR: Address 0x%X or 0x%X out of bounds\n", args[0], args[1]);
-                exit(1);
-            }
+
             chip->zr = chip->ng = false;
             uint32_t a = readMem(args[0], chip->fwboot, chip->fw);
             uint32_t b = readMem(args[1], chip->fwboot, chip->fw);
@@ -315,10 +294,6 @@ void k1coreDecodeAndRun(k1core* chip, uint8_t op, uint32_t* args) {
 
         // XORM — args: [addr1, addr2]
         case 0x26: {
-            if (args[0] >= RAM_SIZE || args[1] >= RAM_SIZE) {
-                fprintf(stderr, "ERROR: Address 0x%X or 0x%X out of bounds\n", args[0], args[1]);
-                exit(1);
-            }
             chip->zr = chip->ng = false;
             uint32_t a = readMem(args[0], chip->fwboot, chip->fw);
             uint32_t b = readMem(args[1], chip->fwboot, chip->fw);
@@ -350,10 +325,6 @@ void k1coreDecodeAndRun(k1core* chip, uint8_t op, uint32_t* args) {
 
         // NOTM — args: [addr]
         case 0x29: {
-            if (args[0] >= RAM_SIZE) {
-                fprintf(stderr, "ERROR: Address 0x%X out of bounds\n", args[0]);
-                exit(1);
-            }
             chip->zr = chip->ng = false;
             uint32_t a = readMem(args[0], chip->fwboot, chip->fw);
             chip->ar.v = ~a;
@@ -373,10 +344,7 @@ void k1coreDecodeAndRun(k1core* chip, uint8_t op, uint32_t* args) {
 
         // POPM — args: [addr]
         case 0x2B:
-            if (args[0] >= RAM_SIZE) {
-                fprintf(stderr, "ERROR: Address 0x%X out of bounds\n", args[0]);
-                exit(1);
-            }
+
             writeMem(args[0], popStack(chip));
             break;
 
@@ -394,19 +362,44 @@ void k1coreDecodeAndRun(k1core* chip, uint8_t op, uint32_t* args) {
         // FWON - args: [none]
         case 0x2E:
             if (!chip->privileged) {
-
+                k1coreTrap(chip, TRAP_PRIVILEGE_VIOLATION);
             }
 
+            chip->fwboot = true;
             break;
         
         // FWOFF - args: [none]
         case 0x2F:
-            
+            if (!chip->privileged) {
+                k1coreTrap(chip, TRAP_PRIVILEGE_VIOLATION);
+            }
+
+            chip->fwboot = false;
             break;
 
         // INT - args: [imm32]
         case 0x30:
-            
+            k1coreTrap(chip, args[0]);
+            break;
+
+        // PUSHAR — args: [none]
+        case 0x31:
+            pushStack(chip, chip->ar.v);
+            break;
+
+        // JMPU — args: [addr1]
+        case 0x32:
+            chip->privileged    = false;
+            chip->pc.v          = args[0];
+            break;
+
+        // LOADSP — args: [reg1]
+        case 0x33:
+            if (args[0] > 0xF) {
+                fprintf(stderr, "ERROR: Unknown register 0x%X\n", args[0]);
+                exit(1);
+            }
+            chip->sp.v = chip->regs[args[0]].v;
             break;
 
         default:
@@ -434,6 +427,20 @@ uint32_t popStack(k1core* chip) {
     return val;
 }
 
+void k1coreTrap(k1core* chip, uint8_t trap_type) {
+    uint32_t handler = ram[IVT_BASE + trap_type];
+
+    if (handler == 0) {
+        fprintf(stderr, "ERROR: No trap handler found at 0x%X for trap #%d\n", IVT_BASE + trap_type, trap_type);
+        k1coreDump(chip);
+        k1coreStackDump(chip);
+
+        exit(1);
+    }
+    pushStack(chip, chip->pc.v);
+    chip->pc.v = handler;
+}
+
 void k1coreDump(k1core* chip) {
     printf("K1 CPU STATE:\n");
     printf("PC: 0x%X  AR: 0x%X\n", chip->pc.v, chip->ar.v);
@@ -441,5 +448,19 @@ void k1coreDump(k1core* chip) {
         printf("r%d: 0x%X\n", i, chip->regs[i].v);
     printf("zr=%d ng=%d lt=%d gt=%d eq=%d\n",
         chip->zr, chip->ng, chip->lt, chip->gt, chip->eq);
+    printf("\n");
+}
+
+void k1coreStackDump(k1core* chip) {
+    printf("K1 CPU STACK (%d items):\n", chip->sp.v);
+    if (chip->sp.v == 0) {
+        printf("  (empty)\n");
+    } else {
+        for (int i = chip->sp.v - 1; i >= 0; i--) {
+            printf("  [%d] 0x%X", i, chip->stack[i]);
+            if (i == (int)chip->sp.v - 1) printf("  <- top");
+            printf("\n");
+        }
+    }
     printf("\n");
 }
